@@ -3,9 +3,34 @@ import { parseTicketFromText } from "@/lib/gemini";
 import { createTicket, checkExistingTicketByTelegramId } from "@/lib/tickets";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 25; // Cho phép Vercel Serverless Function chạy tối đa 25s
 
 // =============================================================================
-// POST /api/telegram - Webhook tiếp nhận tin nhắn từ Telegram Bot (Debug & Tối ưu G1)
+// GET /api/telegram - Endpoint chẩn đoán Model & Thời gian phản hồi từ Vercel
+// Giúp kiểm tra trực tiếp Gemini từ cloud mà không cần gửi tin nhắn Telegram
+// =============================================================================
+export async function GET() {
+  const start = Date.now();
+  const configuredModel = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+  const hasKey = Boolean(process.env.GEMINI_API_KEY);
+
+  const testSample = "Máy in phòng kế toán kẹt giấy liên tục không in được";
+  const parsed = await parseTicketFromText(testSample);
+  const durationMs = Date.now() - start;
+
+  return NextResponse.json({
+    diagnostics: {
+      model_configured: configuredModel,
+      has_gemini_api_key: hasKey,
+      response_time_ms: durationMs,
+      status: parsed.is_fallback ? "GEMINI_FALLBACK" : "GEMINI_PARSED",
+    },
+    test_result: parsed,
+  });
+}
+
+// =============================================================================
+// POST /api/telegram - Webhook tiếp nhận tin nhắn từ Telegram Bot (G1)
 // =============================================================================
 export async function POST(request: Request) {
   const requestStart = Date.now();
@@ -58,7 +83,6 @@ export async function POST(request: Request) {
 
     // =========================================================================
     // 5. PRE-CHECK DUPLICATE: Kiểm tra ticket đã tồn tại TRƯỚC KHI gọi Gemini
-    // Giúp chặn ngay các request gửi lại từ Telegram mà không tốn quota/thời gian AI
     // =========================================================================
     const existingTicket = await checkExistingTicketByTelegramId(compositeId);
     if (existingTicket) {
@@ -72,12 +96,12 @@ export async function POST(request: Request) {
       );
     }
 
-    // 6. Phân loại nội dung bằng Gemini 3.8 Flash (có timeout và retry 503 duy nhất 1 lần)
-    console.log(`[+${elapsed()}] 🤖 [BẮT ĐẦU PHÂN LOẠI GEMINI]...`);
+    // 6. Phân loại nội dung bằng Gemini (Timeout 8500ms, retry 503 duy nhất 1 lần)
+    const configuredModel = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+    console.log(`[+${elapsed()}] 🤖 [BẮT ĐẦU PHÂN LOẠI GEMINI] Model: "${configuredModel}"...`);
     const parsed = await parseTicketFromText(text);
 
     // 7. Lưu ticket vào Supabase bằng logic dùng chung
-    // Ràng buộc UNIQUE ở database sẽ bắt được race-condition nếu 2 request đến cùng lúc
     console.log(`[+${elapsed()}] 💾 [BẮT ĐẦU LƯU TICKET VÀO SUPABASE]...`);
     const result = await createTicket({
       title: parsed.title,
