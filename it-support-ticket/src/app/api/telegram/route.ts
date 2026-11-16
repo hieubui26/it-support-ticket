@@ -6,8 +6,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 25; // Cho phép Vercel Serverless Function chạy tối đa 25s
 
 // =============================================================================
-// GET /api/telegram - Endpoint chẩn đoán Model & Thời gian phản hồi từ Vercel
-// Giúp kiểm tra trực tiếp Gemini từ cloud mà không cần gửi tin nhắn Telegram
+// GET /api/telegram - Endpoint chẩn đoán Model & Chi tiết lỗi trực tiếp từ Vercel
 // =============================================================================
 export async function GET() {
   const start = Date.now();
@@ -24,6 +23,7 @@ export async function GET() {
       has_gemini_api_key: hasKey,
       response_time_ms: durationMs,
       status: parsed.is_fallback ? "GEMINI_FALLBACK" : "GEMINI_PARSED",
+      google_error_detail: parsed.error_detail || null,
     },
     test_result: parsed,
   });
@@ -96,9 +96,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // 6. Phân loại nội dung bằng Gemini (Timeout 8500ms, retry 503 duy nhất 1 lần)
+    // 6. Phân loại nội dung bằng Gemini (hỗ trợ model fallback khi 503)
     const configuredModel = process.env.GEMINI_MODEL || "gemini-3.8-flash";
-    console.log(`[+${elapsed()}] 🤖 [BẮT ĐẦU PHÂN LOẠI GEMINI] Model: "${configuredModel}"...`);
+    console.log(`[+${elapsed()}] 🤖 [BẮT ĐẦU PHÂN LOẠI GEMINI] Model cấu hình: "${configuredModel}"...`);
     const parsed = await parseTicketFromText(text);
 
     // 7. Lưu ticket vào Supabase bằng logic dùng chung
