@@ -13,13 +13,17 @@ const geminiApiKey = process.env.GEMINI_API_KEY;
 const geminiModel = process.env.GEMINI_MODEL || "gemini-3.8-flash";
 
 if (!botToken) {
-  console.error("[LỖI CẤU HÌNH] Chưa tìm thấy TELEGRAM_BOT_TOKEN trong .env.local.");
+  console.error(
+    "[LỖI CẤU HÌNH] Chưa tìm thấy TELEGRAM_BOT_TOKEN trong .env.local.",
+  );
   console.error("Vui lòng cấu hình TELEGRAM_BOT_TOKEN trước khi chạy bot.");
   process.exit(1);
 }
 
 if (!supabaseUrl || !supabaseServiceKey) {
-  console.error("[LỖI CẤU HÌNH] Thiếu NEXT_PUBLIC_SUPABASE_URL hoặc SUPABASE_SERVICE_ROLE_KEY trong .env.local.");
+  console.error(
+    "[LỖI CẤU HÌNH] Thiếu NEXT_PUBLIC_SUPABASE_URL hoặc SUPABASE_SERVICE_ROLE_KEY trong .env.local.",
+  );
   process.exit(1);
 }
 
@@ -50,7 +54,9 @@ async function parseWithGemini(rawText) {
   };
 
   if (!geminiApiKey) {
-    console.warn("[CẢNH BÁO] Chưa cấu hình GEMINI_API_KEY. Áp dụng fallback mặc định.");
+    console.warn(
+      "[CẢNH BÁO] Chưa cấu hình GEMINI_API_KEY. Áp dụng fallback mặc định.",
+    );
     return fallback;
   }
 
@@ -107,23 +113,39 @@ Chỉ trả về duy nhất một JSON object hợp lệ, không kèm văn bản
     const parts = data?.candidates?.[0]?.content?.parts;
     if (!parts || parts.length === 0) return fallback;
 
-    let rawJsonText = parts.map((p) => p.text || "").join("").trim();
-    if (rawJsonText.startsWith("```json")) {
-      rawJsonText = rawJsonText.replace(/^```json\s*/, "").replace(/\s*```$/, "");
-    } else if (rawJsonText.startsWith("```")) {
-      rawJsonText = rawJsonText.replace(/^```\s*/, "").replace(/\s*```$/, "");
-    }
+    let rawJsonText = parts
+      .filter((part) => part.thought !== true && typeof part.text === "string")
+      .map((part) => part.text)
+      .join("")
+      .trim();
+
+    rawJsonText = rawJsonText
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/, "")
+      .trim();
 
     const parsed = JSON.parse(rawJsonText);
     const validPriorities = ["Low", "Medium", "High", "Critical"];
-    const priority = validPriorities.includes(parsed.priority) ? parsed.priority : "Medium";
+    const priority = validPriorities.includes(parsed.priority)
+      ? parsed.priority
+      : "Medium";
 
     return {
-      title: parsed.title && typeof parsed.title === "string" ? parsed.title.trim() : fallback.title,
-      description: parsed.description && typeof parsed.description === "string" ? parsed.description.trim() : rawText,
+      title:
+        parsed.title && typeof parsed.title === "string"
+          ? parsed.title.trim()
+          : fallback.title,
+      description:
+        parsed.description && typeof parsed.description === "string"
+          ? parsed.description.trim()
+          : rawText,
       priority,
-      category: parsed.category && typeof parsed.category === "string" ? parsed.category.trim() : "General",
-      needs_review: typeof parsed.needs_review === "boolean" ? parsed.needs_review : true,
+      category:
+        parsed.category && typeof parsed.category === "string"
+          ? parsed.category.trim()
+          : "General",
+      needs_review:
+        typeof parsed.needs_review === "boolean" ? parsed.needs_review : true,
     };
   } catch (err) {
     console.warn("[GEMINI CẢNH BÁO] Ngoại lệ khi parse kết quả:", err.message);
@@ -134,7 +156,16 @@ Chỉ trả về duy nhất một JSON object hợp lệ, không kèm văn bản
 // =============================================================================
 // 3. HÀM LƯU TICKET VÀO SUPABASE (DÙNG CHUNG LOGIC & CHỐNG LƯU TRÙNG)
 // =============================================================================
-async function saveTicketToDatabase({ title, description, priority, category, reporterName, originalText, compositeId, needsReview }) {
+async function saveTicketToDatabase({
+  title,
+  description,
+  priority,
+  category,
+  reporterName,
+  originalText,
+  compositeId,
+  needsReview,
+}) {
   const newTicket = {
     title: title.trim(),
     description: description ? description.trim() : "",
@@ -183,18 +214,22 @@ process.on("SIGINT", () => {
 });
 
 async function startPolling() {
-  console.log("🚀 [KHỞI ĐỘNG] Đang lắng nghe tin nhắn Telegram qua getUpdates (Long-polling)...\n");
+  console.log(
+    "🚀 [KHỞI ĐỘNG] Đang lắng nghe tin nhắn Telegram qua getUpdates (Long-polling)...\n",
+  );
 
   while (isRunning) {
     try {
       const getUpdatesUrl = `https://api.telegram.org/bot${botToken}/getUpdates?offset=${offset}&timeout=30`;
-      
+
       const response = await fetch(getUpdatesUrl, {
         signal: AbortSignal.timeout(35000), // Timeout 35s cho long-polling 30s
       });
 
       if (!response.ok) {
-        console.warn(`[TELEGRAM CẢNH BÁO] API trả về status: ${response.status} ${response.statusText}`);
+        console.warn(
+          `[TELEGRAM CẢNH BÁO] API trả về status: ${response.status} ${response.statusText}`,
+        );
         // Chờ 3s trước khi thử lại để tránh spam
         await new Promise((r) => setTimeout(r, 3000));
         continue;
@@ -202,7 +237,10 @@ async function startPolling() {
 
       const body = await response.json();
       if (!body.ok) {
-        console.warn("[TELEGRAM LỖI] Phản hồi không thành công:", body.description);
+        console.warn(
+          "[TELEGRAM LỖI] Phản hồi không thành công:",
+          body.description,
+        );
         await new Promise((r) => setTimeout(r, 3000));
         continue;
       }
@@ -231,18 +269,27 @@ async function startPolling() {
         }
 
         // Tên người báo lỗi từ thông tin Telegram
-        const reporterName = [message.from?.first_name, message.from?.last_name]
-          .filter(Boolean)
-          .join(" ") || message.from?.username || `Chat_${chatId}`;
+        const reporterName =
+          [message.from?.first_name, message.from?.last_name]
+            .filter(Boolean)
+            .join(" ") ||
+          message.from?.username ||
+          `Chat_${chatId}`;
 
-        console.log(`\n------------------------------------------------------------`);
-        console.log(`📥 [ĐÃ NHẬN] Message ID ${compositeId} từ "${reporterName}": "${text}"`);
+        console.log(
+          `\n------------------------------------------------------------`,
+        );
+        console.log(
+          `📥 [ĐÃ NHẬN] Message ID ${compositeId} từ "${reporterName}": "${text}"`,
+        );
 
         // Phân loại với Gemini AI
         const parsed = await parseWithGemini(text);
         console.log(`🤖 [ĐÃ PHÂN LOẠI]`);
         console.log(`   - Tiêu đề: "${parsed.title}"`);
-        console.log(`   - Mức ưu tiên: [${parsed.priority}] | Nhóm: [${parsed.category}] | Cần xem xét: [${parsed.needs_review}]`);
+        console.log(
+          `   - Mức ưu tiên: [${parsed.priority}] | Nhóm: [${parsed.category}] | Cần xem xét: [${parsed.needs_review}]`,
+        );
 
         // Lưu vào Supabase
         const result = await saveTicketToDatabase({
@@ -257,24 +304,35 @@ async function startPolling() {
         });
 
         if (result.duplicate) {
-          console.log(`⚠️  [ĐÃ BỎ QUA BẢN TRÙNG] Message ID ${compositeId} đã được lưu trước đó.`);
+          console.log(
+            `⚠️  [ĐÃ BỎ QUA BẢN TRÙNG] Message ID ${compositeId} đã được lưu trước đó.`,
+          );
           // Đã xác nhận tồn tại trong DB -> Tăng offset an toàn
           offset = update.update_id + 1;
         } else if (result.success) {
           const shortId = result.ticket.id.slice(0, 8);
-          console.log(`✅ [ĐÃ LƯU] Ticket #${shortId} ("${result.ticket.title}") đã xuất hiện trên Dashboard!`);
+          console.log(
+            `✅ [ĐÃ LƯU] Ticket #${shortId} ("${result.ticket.title}") đã xuất hiện trên Dashboard!`,
+          );
           // Xử lý thành công -> Tăng offset
           offset = update.update_id + 1;
         } else {
-          console.error(`❌ [LỖI LƯU TICKET] Không thể lưu Message ID ${compositeId}:`, result.error);
-          console.log(`   Sẽ thử lại ở lượt poll tiếp theo (Không tăng offset).`);
+          console.error(
+            `❌ [LỖI LƯU TICKET] Không thể lưu Message ID ${compositeId}:`,
+            result.error,
+          );
+          console.log(
+            `   Sẽ thử lại ở lượt poll tiếp theo (Không tăng offset).`,
+          );
           // Không tăng offset để vòng lặp sau xử lý lại
           await new Promise((r) => setTimeout(r, 2000));
         }
       }
     } catch (networkError) {
       if (networkError.name !== "TimeoutError") {
-        console.warn(`[MẠNG CẢNH BÁO] Không thể kết nối tới Telegram API (${networkError.message}). Sẽ thử lại sau 5s...`);
+        console.warn(
+          `[MẠNG CẢNH BÁO] Không thể kết nối tới Telegram API (${networkError.message}). Sẽ thử lại sau 5s...`,
+        );
       }
       await new Promise((r) => setTimeout(r, 5000));
     }
