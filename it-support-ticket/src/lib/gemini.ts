@@ -11,13 +11,22 @@ export interface ParsedTicketData {
 }
 
 // Helper: Gọi REST Gemini với timeout 20s và header x-goog-api-key chuẩn
+const TICKET_PRIORITIES: TicketPriority[] = [
+  "Low", "Medium", "High", "Critical",
+];
+
+const TICKET_CATEGORIES = [
+  "Network", "Hardware", "Software", "Access", "General",
+];
+
 async function callGeminiRest(
   prompt: string,
   model: string,
   apiKey: string,
-  timeoutMs = 20000
+  timeoutMs = 20000,
 ): Promise<Response> {
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const endpoint =
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
 
   return fetch(endpoint, {
     method: "POST",
@@ -26,16 +35,20 @@ async function callGeminiRest(
       "x-goog-api-key": apiKey,
     },
     body: JSON.stringify({
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: prompt }],
-        },
-      ],
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
       generationConfig: {
         responseMimeType: "application/json",
-        temperature: 0,
-        maxOutputTokens: 250,
+        responseJsonSchema: {
+          type: "object",
+          properties: {
+            title: { type: "string" },
+            description: { type: "string" },
+            priority: { type: "string", enum: TICKET_PRIORITIES },
+            category: { type: "string", enum: TICKET_CATEGORIES },
+            needs_review: { type: "boolean" },
+          },
+          required: ["title", "description", "priority", "category", "needs_review"],
+        },
       },
     }),
     signal: AbortSignal.timeout(timeoutMs),
@@ -149,11 +162,11 @@ Chỉ trả về duy nhất một JSON object hợp lệ, không kèm văn bản
   // 4. Parse JSON kết quả
   try {
     const data = await res.json();
-    const parts = data?.candidates?.[0]?.content?.parts;
-    if (!parts || parts.length === 0) {
-      console.warn(`[+${elapsed()}] ⚠️ [GEMINI FALLBACK] Model: "${model}". Lý do: candidates[0].parts rỗng.`);
-      fallback.error_detail = "Empty parts from Gemini API";
-      return fallback;
+    const candidate = data?.candidates?.[0];
+    const parts = candidate?.content?.parts;
+
+    if (!Array.isArray(parts) || parts.length === 0) {
+      throw new Error(`Gemini không trả nội dung (${candidate?.finishReason ?? "unknown"})`);
     }
 
     const answer = parts
@@ -164,21 +177,36 @@ Chỉ trả về duy nhất một JSON object hợp lệ, không kèm văn bản
       .join("")
       .trim();
 
-    // Chấp nhận JSON thuần hoặc một khối JSON có câu dẫn phía trước.
-    const jsonBlocks = [...answer.matchAll(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/gi)];
-    const jsonText = jsonBlocks.length === 1 ? jsonBlocks[0][1] : answer;
+    const blocks = Array.from(answer.matchAll(/```(?:json)?\s*([\s\S]*?)\s*```/gi));
+    const jsonText = blocks.length === 1 ? blocks[0][1].trim() : answer;
 
-    const parsed = JSON.parse(jsonText);
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch {
+      throw new Error(
+        `Gemini trả JSON không hợp lệ (finishReason=${candidate.finishReason ?? "unknown"}, length=${answer.length})`
+      );
+    }
 
-    const validPriorities: TicketPriority[] = ["Low", "Medium", "High", "Critical"];
-    const priority: TicketPriority = validPriorities.includes(parsed.priority) ? parsed.priority : "Medium";
+    if (
+      !parsed ||
+      typeof parsed.title !== "string" ||
+      !parsed.title.trim() ||
+      typeof parsed.description !== "string" ||
+      !TICKET_PRIORITIES.includes(parsed.priority) ||
+      !TICKET_CATEGORIES.includes(parsed.category) ||
+      typeof parsed.needs_review !== "boolean"
+    ) {
+      throw new Error("Gemini trả ticket thiếu trường hoặc có giá trị ngoài schema");
+    }
 
     const parsedResult: ParsedTicketData = {
-      title: parsed.title && typeof parsed.title === "string" ? parsed.title.trim() : fallback.title,
-      description: parsed.description && typeof parsed.description === "string" ? parsed.description.trim() : rawText,
-      priority,
-      category: parsed.category && typeof parsed.category === "string" ? parsed.category.trim() : "General",
-      needs_review: typeof parsed.needs_review === "boolean" ? parsed.needs_review : false,
+      title: parsed.title.trim(),
+      description: parsed.description.trim(),
+      priority: parsed.priority,
+      category: parsed.category,
+      needs_review: parsed.needs_review,
       is_fallback: false,
     };
 
