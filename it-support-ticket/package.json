@@ -4,6 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:poll": "node --env-file=.env.local scripts/telegram-poll.mjs",
+    "webhook": "node --env-file=.env.local scripts/telegram-webhook.mjs",
+    "webhook:delete": "node --env-file=.env.local scripts/telegram-webhook.mjs delete",
+    "webhook:info": "node --env-file=.env.local scripts/telegram-webhook.mjs info",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"

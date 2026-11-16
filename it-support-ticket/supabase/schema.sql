@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS public.tickets (
     source TEXT NOT NULL DEFAULT 'portal' CHECK (source IN ('portal', 'telegram')),
     reporter_name TEXT DEFAULT 'Ẩn danh',
     original_text TEXT,
-    telegram_message_id TEXT,
+    telegram_message_id TEXT UNIQUE,
     needs_review BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())

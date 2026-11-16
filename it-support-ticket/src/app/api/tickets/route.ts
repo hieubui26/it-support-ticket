@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdminClient } from "@/lib/supabase";
-import { TicketPriority } from "@/types/ticket";
+import { createTicket } from "@/lib/tickets";
 
 export const dynamic = "force-dynamic";
 
 // =============================================================================
-// GET /api/tickets - Lấy danh sách toàn bộ tickets từ Supabase (Layer 3)
+// GET /api/tickets - Lấy danh sách toàn bộ tickets từ Supabase (Layer 3 & 4)
 // =============================================================================
 export async function GET() {
   try {
@@ -38,8 +38,7 @@ export async function GET() {
 }
 
 // =============================================================================
-// POST /api/tickets - Tạo ticket mới từ Portal (Layer 3)
-// Tự động gán: source = "portal", status = "New"
+// POST /api/tickets - Tạo ticket mới từ Portal (Dùng chung hàm createTicket)
 // =============================================================================
 export async function POST(request: Request) {
   try {
@@ -54,36 +53,22 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. Chuẩn hóa mức ưu tiên
-    const validPriorities: TicketPriority[] = ["Low", "Medium", "High", "Critical"];
-    const safePriority: TicketPriority = validPriorities.includes(priority)
-      ? priority
-      : "Medium";
-
-    const supabase = getSupabaseAdminClient();
-
-    // 3. Thêm mới vào bảng public.tickets
-    const newTicketData = {
+    // 2. Gọi hàm logic dùng chung (source = "portal", status = "New")
+    const result = await createTicket({
       title: title.trim(),
       description: typeof description === "string" ? description.trim() : "",
-      priority: safePriority,
+      priority,
       category: "General",
-      status: "New",
       source: "portal",
+      status: "New",
       reporter_name: typeof reporter_name === "string" && reporter_name.trim() ? reporter_name.trim() : "Ẩn danh",
       needs_review: false,
-    };
+    });
 
-    const { data, error } = await supabase
-      .from("tickets")
-      .insert([newTicketData])
-      .select()
-      .single();
-
-    if (error) {
-      console.error("[POST /api/tickets] Lỗi insert Supabase:", error.message);
+    if (!result.success || !result.ticket) {
+      console.error("[POST /api/tickets] Lỗi lưu ticket:", result.error);
       return NextResponse.json(
-        { error: "Không thể lưu ticket vào Supabase.", details: error.message },
+        { error: "Không thể lưu ticket vào Supabase.", details: result.error },
         { status: 500 }
       );
     }
@@ -91,7 +76,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         message: "Ticket đã được tạo thành công.",
-        ticket: data,
+        ticket: result.ticket,
       },
       { status: 201 }
     );
