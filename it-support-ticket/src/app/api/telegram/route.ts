@@ -1,20 +1,23 @@
 import { NextResponse } from "next/server";
 import { parseTicketFromText } from "@/lib/gemini";
-import { createTicket } from "@/lib/tickets";
+import { createTicket, checkExistingTicketByTelegramId } from "@/lib/tickets";
 
 export const dynamic = "force-dynamic";
 
 // =============================================================================
-// POST /api/telegram - Webhook tiếp nhận tin nhắn từ Telegram Bot trên Vercel (G1)
+// POST /api/telegram - Webhook tiếp nhận tin nhắn từ Telegram Bot (Debug & Tối ưu G1)
 // =============================================================================
 export async function POST(request: Request) {
+  const requestStart = Date.now();
+  const elapsed = () => `${Date.now() - requestStart}ms`;
+
   try {
     // 1. Kiểm tra header bí mật X-Telegram-Bot-Api-Secret-Token
     const secretToken = request.headers.get("x-telegram-bot-api-secret-token");
     const expectedSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
 
     if (expectedSecret && secretToken !== expectedSecret) {
-      console.warn("[WEBHOOK BẢO MẬT] Từ chối request do secret token không khớp hoặc bị thiếu.");
+      console.warn(`[+${elapsed()}] 🔒 [WEBHOOK BẢO MẬT] Từ chối request do secret token không khớp hoặc bị thiếu.`);
       return NextResponse.json({ error: "Unauthorized webhook" }, { status: 401 });
     }
 
@@ -33,14 +36,14 @@ export async function POST(request: Request) {
 
     // 3. Bỏ qua các lệnh bot (như /start, /help, /info) có chủ đích
     if (!text || text.startsWith("/")) {
-      console.log(`[WEBHOOK BỎ QUA LỆNH] Chat ID ${message.chat?.id}: "${text}"`);
+      console.log(`[+${elapsed()}] ⏭️ [WEBHOOK BỎ QUA LỆNH] Chat ID ${message.chat?.id}: "${text}"`);
       return NextResponse.json(
         { ok: true, ignored: true, reason: "Command message" },
         { status: 200 }
       );
     }
 
-    // 4. Khóa ghép chống lưu trùng: chat_id:message_id
+    // 4. Khóa ghép định danh: chat_id:message_id
     const chatId = message.chat?.id;
     const messageId = message.message_id;
     const compositeId = `${chatId}:${messageId}`;
@@ -51,15 +54,31 @@ export async function POST(request: Request) {
       `Chat_${chatId}`;
 
     console.log(`\n------------------------------------------------------------`);
-    console.log(`📥 [WEBHOOK ĐÃ NHẬN] Message ID ${compositeId} từ "${reporterName}": "${text}"`);
+    console.log(`[+${elapsed()}] 📥 [WEBHOOK ĐÃ NHẬN] Message ID ${compositeId} từ "${reporterName}": "${text}"`);
 
-    // 5. Phân loại thông minh bằng Gemini 3.8 Flash (tái sử dụng từ polling)
+    // =========================================================================
+    // 5. PRE-CHECK DUPLICATE: Kiểm tra ticket đã tồn tại TRƯỚC KHI gọi Gemini
+    // Giúp chặn ngay các request gửi lại từ Telegram mà không tốn quota/thời gian AI
+    // =========================================================================
+    const existingTicket = await checkExistingTicketByTelegramId(compositeId);
+    if (existingTicket) {
+      const shortId = existingTicket.id.slice(0, 8);
+      console.log(
+        `[+${elapsed()}] ⚠️ [ĐÃ BỎ QUA BẢN TRÙNG (PRE-CHECK)] Message ID ${compositeId} đã tồn tại trong database (Ticket #${shortId} - "${existingTicket.title}"). Trả về 200 OK ngay.`
+      );
+      return NextResponse.json(
+        { ok: true, duplicate: true, ticket_id: existingTicket.id },
+        { status: 200 }
+      );
+    }
+
+    // 6. Phân loại nội dung bằng Gemini 3.8 Flash (có timeout và retry 503 duy nhất 1 lần)
+    console.log(`[+${elapsed()}] 🤖 [BẮT ĐẦU PHÂN LOẠI GEMINI]...`);
     const parsed = await parseTicketFromText(text);
-    console.log(`🤖 [WEBHOOK ĐÃ PHÂN LOẠI]`);
-    console.log(`   - Tiêu đề: "${parsed.title}"`);
-    console.log(`   - Mức ưu tiên: [${parsed.priority}] | Nhóm: [${parsed.category}] | Cần xem xét: [${parsed.needs_review}]`);
 
-    // 6. Lưu ticket vào Supabase bằng logic dùng chung
+    // 7. Lưu ticket vào Supabase bằng logic dùng chung
+    // Ràng buộc UNIQUE ở database sẽ bắt được race-condition nếu 2 request đến cùng lúc
+    console.log(`[+${elapsed()}] 💾 [BẮT ĐẦU LƯU TICKET VÀO SUPABASE]...`);
     const result = await createTicket({
       title: parsed.title,
       description: parsed.description,
@@ -73,16 +92,17 @@ export async function POST(request: Request) {
       needs_review: parsed.needs_review,
     });
 
-    // 7. Xử lý kết quả lưu:
-    // Trường hợp A: Bản ghi đã tồn tại (trùng lặp) -> Trả về 200 OK để Telegram không gửi lại
+    // Trường hợp A: Trùng lặp do request song song chặn bởi database UNIQUE
     if (result.duplicate) {
-      console.log(`⚠️  [WEBHOOK ĐÃ BỎ QUA BẢN TRÙNG] Message ID ${compositeId} đã được lưu trước đó.`);
+      console.log(
+        `[+${elapsed()}] ⚠️ [ĐÃ BỎ QUA BẢN TRÙNG (UNIQUE CONSTRAINT)] Message ID ${compositeId} được chặn thành công bởi database.`
+      );
       return NextResponse.json({ ok: true, duplicate: true }, { status: 200 });
     }
 
     // Trường hợp B: Lưu thất bại -> Trả về 500 để Telegram kích hoạt cơ chế retry sau
     if (!result.success || !result.ticket) {
-      console.error(`❌ [WEBHOOK LỖI LƯU TICKET] Message ID ${compositeId}:`, result.error);
+      console.error(`[+${elapsed()}] ❌ [LỖI LƯU TICKET] Message ID ${compositeId}:`, result.error);
       return NextResponse.json(
         { error: "Lỗi lưu ticket vào cơ sở dữ liệu", details: result.error },
         { status: 500 }
@@ -91,16 +111,18 @@ export async function POST(request: Request) {
 
     // Trường hợp C: Lưu thành công -> Trả về 200 OK
     const shortId = result.ticket.id.slice(0, 8);
-    console.log(`✅ [WEBHOOK ĐÃ LƯU] Ticket #${shortId} ("${result.ticket.title}") đã xuất hiện trên Dashboard!`);
+    console.log(
+      `[+${elapsed()}] ✅ [ĐÃ LƯU THÀNH CÔNG] Ticket #${shortId} ("${result.ticket.title}") [${parsed.priority} - ${parsed.category}]. Tổng thời gian: ${elapsed()}`
+    );
     return NextResponse.json(
-      { ok: true, ticket: result.ticket },
+      { ok: true, ticket: result.ticket, elapsed: elapsed() },
       { status: 200 }
     );
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Lỗi server không xác định";
-    console.error("[POST /api/telegram] Exception:", message);
+    const errorMsg = error instanceof Error ? error.message : "Lỗi server không xác định";
+    console.error(`[+${elapsed()}] ❌ [POST /api/telegram] Ngoại lệ:`, errorMsg);
     return NextResponse.json(
-      { error: "Lỗi xử lý webhook Telegram", details: message },
+      { error: "Lỗi xử lý webhook Telegram", details: errorMsg },
       { status: 500 }
     );
   }

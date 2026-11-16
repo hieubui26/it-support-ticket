@@ -22,6 +22,32 @@ export interface CreateTicketResult {
 }
 
 // =============================================================================
+// Hàm checkExistingTicketByTelegramId: Kiểm tra ticket đã tồn tại trước khi gọi Gemini
+// =============================================================================
+export async function checkExistingTicketByTelegramId(
+  telegramMessageId: string
+): Promise<Ticket | null> {
+  try {
+    const supabase = getSupabaseAdminClient();
+    const { data, error } = await supabase
+      .from("tickets")
+      .select("*")
+      .eq("telegram_message_id", telegramMessageId)
+      .maybeSingle();
+
+    if (error) {
+      console.warn("[CHECK DUPLICATE] Lỗi truy vấn Supabase:", error.message);
+      return null;
+    }
+    return (data as Ticket) || null;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Ngoại lệ truy vấn";
+    console.warn("[CHECK DUPLICATE] Ngoại lệ khi kiểm tra:", msg);
+    return null;
+  }
+}
+
+// =============================================================================
 // Hàm createTicket: Dùng chung logic lưu ticket cho cả Portal và Telegram Bot
 // =============================================================================
 export async function createTicket(input: CreateTicketInput): Promise<CreateTicketResult> {
@@ -52,7 +78,7 @@ export async function createTicket(input: CreateTicketInput): Promise<CreateTick
     .single();
 
   if (error) {
-    // Mã lỗi PostgreSQL 23505 đại diện cho vi phạm ràng buộc UNIQUE (chống trùng lặp tin nhắn)
+    // Mã lỗi PostgreSQL 23505 đại diện cho vi phạm ràng buộc UNIQUE (chặn 2 request đến cùng lúc)
     const isDuplicate =
       error.code === "23505" ||
       error.message?.toLowerCase().includes("unique") ||
