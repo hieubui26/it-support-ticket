@@ -10,12 +10,12 @@ export interface ParsedTicketData {
   error_detail?: string;
 }
 
-// Helper: Gọi REST Gemini với timeout rõ ràng và bảo mật URL
+// Helper: Gọi REST Gemini với timeout 20s và header x-goog-api-key chuẩn
 async function callGeminiRest(
   prompt: string,
   model: string,
   apiKey: string,
-  timeoutMs = 15000
+  timeoutMs = 20000
 ): Promise<Response> {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
@@ -23,6 +23,7 @@ async function callGeminiRest(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      "x-goog-api-key": apiKey,
     },
     body: JSON.stringify({
       contents: [
@@ -34,7 +35,7 @@ async function callGeminiRest(
       generationConfig: {
         responseMimeType: "application/json",
         temperature: 0,
-        maxOutputTokens: 300,
+        maxOutputTokens: 250,
       },
     }),
     signal: AbortSignal.timeout(timeoutMs),
@@ -42,14 +43,17 @@ async function callGeminiRest(
 }
 
 // =============================================================================
-// Hàm parseTicketFromText: Chẩn đoán chi tiết lỗi Google & Hỗ trợ Model Fallback
+// Hàm parseTicketFromText: Cho đủ 20s ngân sách để Gemini hoàn tất phản hồi từ Cloud
 // =============================================================================
-export async function parseTicketFromText(rawText: string): Promise<ParsedTicketData> {
+export async function parseTicketFromText(
+  rawText: string,
+  modelOverride?: string
+): Promise<ParsedTicketData> {
   const startTime = Date.now();
   const elapsed = () => `${Date.now() - startTime}ms`;
 
   const apiKey = process.env.GEMINI_API_KEY;
-  const primaryModel = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+  const model = modelOverride || process.env.GEMINI_MODEL || "gemini-3.8-flash";
 
   // Fallback an toàn theo schema hiện có
   const fallback: ParsedTicketData = {
@@ -62,10 +66,12 @@ export async function parseTicketFromText(rawText: string): Promise<ParsedTicket
   };
 
   if (!apiKey) {
-    console.warn(`[+${elapsed()}] ⚠️ [GEMINI FALLBACK] Lý do: GEMINI_API_KEY chưa được thiết lập.`);
+    console.warn(`[+${elapsed()}] ⚠️ [GEMINI FALLBACK] Model: "${model}". Lý do: GEMINI_API_KEY chưa được thiết lập.`);
     fallback.error_detail = "GEMINI_API_KEY is not set";
     return fallback;
   }
+
+  console.log(`[+${elapsed()}] 🤖 [GEMINI BẮT ĐẦU] Gọi model: "${model}" | Timeout: 20000ms`);
 
   const prompt = `
 Bạn là chuyên viên tiếp nhận và phân loại sự cố IT Support.
@@ -97,44 +103,25 @@ Chỉ trả về duy nhất một JSON object hợp lệ, không kèm văn bản
 `.trim();
 
   let res: Response | null = null;
-  let activeModel = primaryModel;
   let errorReason = "";
 
-  console.log(`[+${elapsed()}] 🤖 [GEMINI BẮT ĐẦU] Gọi model: "${activeModel}"...`);
-
-  // 1. Lần gọi chính với primaryModel
+  // 1. Cho Gemini thời gian 20 giây (20000ms) để không bị ngắt giữa chừng
   try {
-    res = await callGeminiRest(prompt, activeModel, apiKey, 12000);
+    res = await callGeminiRest(prompt, model, apiKey, 20000);
   } catch (err: unknown) {
     const errorObj = err as { name?: string; message?: string };
-    errorReason = errorObj.name === "TimeoutError" ? "Timeout quá 12000ms" : errorObj.message || "Lỗi mạng";
+    errorReason = errorObj.name === "TimeoutError" ? "Timeout quá 20000ms" : errorObj.message || "Lỗi mạng";
   }
 
-  // 2. Nếu Google trả về HTTP 503 (Model Overloaded) hoặc 404
-  if (res && (res.status === 503 || res.status === 404)) {
-    let errBody = "";
+  // 2. Nếu Google trả về 503 (quá tải) và còn thời gian -> Thử lại 1 lần sau 1.5s
+  if (res && res.status === 503 && Date.now() - startTime < 16000) {
+    console.warn(`[+${elapsed()}] 🔄 [GEMINI RETRY] Model: "${model}". Gặp HTTP 503. Chờ 1500ms thử lại...`);
+    await new Promise((resolve) => setTimeout(resolve, 1500));
     try {
-      errBody = await res.text();
-    } catch {}
-
-    console.warn(
-      `[+${elapsed()}] 🔄 [GEMINI RETRY/FALLBACK] Model "${activeModel}" trả về HTTP ${res.status}: ${errBody.slice(0, 200)}`
-    );
-
-    // Chờ 1 giây
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    // Thử lại lần 2 với model dự phòng nếu 503/404 kéo dài
-    // Nếu primary là gemini-3.8-flash -> thử gemini-2.5-flash (hoặc ngược lại)
-    const backupModel = activeModel === "gemini-3.8-flash" ? "gemini-2.5-flash" : "gemini-3.8-flash";
-    console.log(`[+${elapsed()}] 🔄 [THỬ MODEL DỰ PHÒNG] Đang chuyển sang model: "${backupModel}"...`);
-    activeModel = backupModel;
-
-    try {
-      res = await callGeminiRest(prompt, activeModel, apiKey, 10000);
+      res = await callGeminiRest(prompt, model, apiKey, 6000);
     } catch (retryErr: unknown) {
       const errorObj = retryErr as { name?: string; message?: string };
-      errorReason = errorObj.name === "TimeoutError" ? "Timeout quá 10000ms ở backup" : errorObj.message || "Lỗi mạng";
+      errorReason = errorObj.name === "TimeoutError" ? "Timeout quá 6000ms ở retry" : errorObj.message || "Lỗi mạng retry";
       res = null;
     }
   }
@@ -152,7 +139,7 @@ Chỉ trả về duy nhất một JSON object hợp lệ, không kèm văn bản
     }
 
     console.warn(
-      `[+${elapsed()}] ⚠️ [GEMINI FALLBACK] Model: "${activeModel}". Chi tiết lỗi từ Google: ${rawError}. Áp dụng fallback với needs_review=true.`
+      `[+${elapsed()}] ⚠️ [GEMINI FALLBACK] Model: "${model}". Chi tiết lỗi: ${rawError}. Áp dụng fallback với needs_review=true.`
     );
 
     fallback.error_detail = rawError;
@@ -164,7 +151,7 @@ Chỉ trả về duy nhất một JSON object hợp lệ, không kèm văn bản
     const data = await res.json();
     const parts = data?.candidates?.[0]?.content?.parts;
     if (!parts || parts.length === 0) {
-      console.warn(`[+${elapsed()}] ⚠️ [GEMINI FALLBACK] Model: "${activeModel}". Lý do: candidates[0].parts rỗng.`);
+      console.warn(`[+${elapsed()}] ⚠️ [GEMINI FALLBACK] Model: "${model}". Lý do: candidates[0].parts rỗng.`);
       fallback.error_detail = "Empty parts from Gemini API";
       return fallback;
     }
@@ -190,13 +177,13 @@ Chỉ trả về duy nhất một JSON object hợp lệ, không kèm văn bản
     };
 
     console.log(
-      `[+${elapsed()}] 🤖 [GEMINI PARSED] Thành công với model "${activeModel}"! Tiêu đề: "${parsedResult.title}" | Priority: [${parsedResult.priority}] | Category: [${parsedResult.category}] | NeedsReview: [${parsedResult.needs_review}]`
+      `[+${elapsed()}] 🤖 [GEMINI PARSED] Model: "${model}" | Tiêu đề: "${parsedResult.title}" | Priority: [${parsedResult.priority}] | Category: [${parsedResult.category}] | NeedsReview: [${parsedResult.needs_review}]`
     );
 
     return parsedResult;
   } catch (parseError: unknown) {
     const errorMsg = parseError instanceof Error ? parseError.message : "Cú pháp không hợp lệ";
-    console.warn(`[+${elapsed()}] ⚠️ [GEMINI FALLBACK] Model: "${activeModel}". JSON parse thất bại: ${errorMsg}`);
+    console.warn(`[+${elapsed()}] ⚠️ [GEMINI FALLBACK] Model: "${model}". JSON parse thất bại: ${errorMsg}`);
     fallback.error_detail = `JSON parse failed: ${errorMsg}`;
     return fallback;
   }
