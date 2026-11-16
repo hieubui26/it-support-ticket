@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IT Support Portal - Gửi yêu cầu hỗ trợ</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex">
+
+  <!-- SIDEBAR TỐI MÀU -->
+  <aside class="w-64 bg-slate-900 text-slate-300 flex flex-col justify-between shrink-0 min-h-screen border-r border-slate-800">
+    <div>
+      <!-- Brand Logo -->
+      <div class="h-16 flex items-center px-6 border-b border-slate-800">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-md shadow-indigo-500/20">
+            IT
+          </div>
+          <div>
+            <h1 class="text-sm font-semibold text-white tracking-wide">IT SUPPORT HUB</h1>
+            <p class="text-[11px] text-slate-400">AgenticPM S01</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Navigation Links -->
+      <nav class="p-4 space-y-1.5">
+        <a href="portal.html" class="flex items-center gap-3 px-3.5 py-2.5 rounded-lg bg-indigo-600/15 text-indigo-400 font-medium text-sm transition border border-indigo-500/20">
+          <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+          </svg>
+          Gửi yêu cầu (Portal)
+        </a>
+        <a href="dashboard.html" class="flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 font-medium text-sm transition">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"></path>
+          </svg>
+          Bảng Kanban (Dashboard)
+        </a>
+      </nav>
+    </div>
+
+    <!-- Sidebar Footer -->
+    <div class="p-4 border-t border-slate-800">
+      <div class="p-3 rounded-lg bg-slate-800/60 text-xs text-slate-400">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span class="text-slate-300 font-medium">Hệ thống sẵn sàng</span>
+        </div>
+        <p>Quy mô team: 5–10 người</p>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT AREA -->
+  <main class="flex-1 p-8 lg:p-12 overflow-y-auto max-w-4xl">
+    <!-- Header -->
+    <div class="mb-8 flex items-center justify-between">
+      <div>
+        <h2 class="text-2xl font-bold text-slate-900 tracking-tight">Cổng tiếp nhận sự cố IT</h2>
+        <p class="text-slate-500 text-sm mt-1">Điền thông tin bên dưới để gửi yêu cầu hỗ trợ kỹ thuật đến bộ phận IT.</p>
+      </div>
+      <a href="dashboard.html" class="inline-flex items-center gap-2 text-sm font-medium text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3.5 py-2 rounded-lg transition">
+        Xem Dashboard
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+        </svg>
+      </a>
+    </div>
+
+    <!-- BANNER MINH HỌA TRẠNG THÁI THÀNH CÔNG -->
+    <div id="successBanner" class="mb-6 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 shadow-sm flex items-start gap-3">
+      <div class="p-1.5 bg-emerald-100 rounded-lg shrink-0 text-emerald-600 mt-0.5">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
+        </svg>
+      </div>
+      <div class="flex-1">
+        <h3 class="font-semibold text-emerald-900 text-sm">Ticket #101 đã được ghi nhận</h3>
+        <p class="text-xs text-emerald-700 mt-0.5">Yêu cầu đã được chuyển tới hàng đợi IT Support. Kỹ thuật viên sẽ xử lý theo mức độ ưu tiên.</p>
+      </div>
+      <button onclick="document.getElementById('successBanner').style.display='none'" class="text-emerald-500 hover:text-emerald-700 text-sm p-1">✕</button>
+    </div>
+
+    <!-- FORM CARD -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-6 sm:p-8">
+      <form id="ticketForm" onsubmit="event.preventDefault(); showSuccess();" class="space-y-6">
+        
+        <!-- Tiêu đề (Bắt buộc) -->
+        <div>
+          <label for="title" class="block text-sm font-semibold text-slate-800 mb-1.5">
+            Tiêu đề sự cố <span class="text-rose-500">*</span>
+          </label>
+          <input 
+            type="text" 
+            id="title" 
+            name="title" 
+            required 
+            placeholder="Ví dụ: Máy in phòng kế toán kẹt giấy liên tục"
+            class="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm transition"
+          >
+          <p class="text-xs text-slate-400 mt-1">Tóm tắt ngắn gọn vấn đề đang gặp phải (tối đa 100 ký tự).</p>
+        </div>
+
+        <!-- Mô tả chi tiết -->
+        <div>
+          <label for="description" class="block text-sm font-semibold text-slate-800 mb-1.5">
+            Mô tả chi tiết
+          </label>
+          <textarea 
+            id="description" 
+            name="description" 
+            rows="4" 
+            placeholder="Mô tả cụ thể hiện tượng lỗi, phần mềm hoặc thiết bị liên quan, bối cảnh xảy ra sự cố..."
+            class="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm transition resize-y"
+          ></textarea>
+        </div>
+
+        <!-- Grid 2 cột: Mức ưu tiên & Tên người báo -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <!-- Mức ưu tiên (Dropdown) -->
+          <div>
+            <label for="priority" class="block text-sm font-semibold text-slate-800 mb-1.5">
+              Mức độ ưu tiên
+            </label>
+            <div class="relative">
+              <select 
+                id="priority" 
+                name="priority" 
+                class="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm bg-white appearance-none cursor-pointer transition pr-10"
+              >
+                <option value="Low">Low - Không khẩn cấp, có thể chờ</option>
+                <option value="Medium" selected>Medium - Ảnh hưởng công việc cá nhân</option>
+                <option value="High">High - Ảnh hưởng đến cả nhóm / phòng ban</option>
+                <option value="Critical">Critical - Toàn bộ hệ thống gián đoạn</option>
+              </select>
+              <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-500">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tên người báo -->
+          <div>
+            <label for="reporter" class="block text-sm font-semibold text-slate-800 mb-1.5">
+              Tên người báo lỗi
+            </label>
+            <input 
+              type="text" 
+              id="reporter" 
+              name="reporter" 
+              placeholder="Ví dụ: Nguyễn Văn A (Marketing)"
+              class="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm transition"
+            >
+          </div>
+        </div>
+
+        <!-- Nút Gửi ticket -->
+        <div class="pt-2 flex items-center justify-between border-t border-slate-100">
+          <span class="text-xs text-slate-500">
+            💡 Gặp sự cố khẩn cấp? Nhắn tin nhanh qua Telegram Bot IT.
+          </span>
+          <button 
+            type="submit" 
+            class="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm shadow-sm transition hover:shadow focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+            </svg>
+            Gửi ticket
+          </button>
+        </div>
+      </form>
+    </div>
+  </main>
+
+  <script>
+    function showSuccess() {
+      const banner = document.getElementById('successBanner');
+      banner.style.display = 'flex';
+      banner.scrollIntoView({ behavior: 'smooth' });
+    }
+  </script>
+</body>
+</html>
