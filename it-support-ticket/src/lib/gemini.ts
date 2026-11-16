@@ -53,7 +53,7 @@ export async function parseTicketFromText(
   const elapsed = () => `${Date.now() - startTime}ms`;
 
   const apiKey = process.env.GEMINI_API_KEY;
-  const model = modelOverride || process.env.GEMINI_MODEL || "gemini-3.8-flash";
+  const model = modelOverride || process.env.GEMINI_MODEL || "gemini-3-flash";
 
   // Fallback an toàn theo schema hiện có
   const fallback: ParsedTicketData = {
@@ -156,14 +156,20 @@ Chỉ trả về duy nhất một JSON object hợp lệ, không kèm văn bản
       return fallback;
     }
 
-    let rawJsonText = parts.map((part: { text?: string }) => part.text || "").join("").trim();
-    if (rawJsonText.startsWith("```json")) {
-      rawJsonText = rawJsonText.replace(/^```json\s*/, "").replace(/\s*```$/, "");
-    } else if (rawJsonText.startsWith("```")) {
-      rawJsonText = rawJsonText.replace(/^```\s*/, "").replace(/\s*```$/, "");
-    }
+    const answer = parts
+      .filter((part: { thought?: boolean; text?: string }) =>
+        part.thought !== true && typeof part.text === "string"
+      )
+      .map((part: { text?: string }) => part.text ?? "")
+      .join("")
+      .trim();
 
-    const parsed = JSON.parse(rawJsonText);
+    // Chấp nhận JSON thuần hoặc một khối JSON có câu dẫn phía trước.
+    const jsonBlocks = [...answer.matchAll(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/gi)];
+    const jsonText = jsonBlocks.length === 1 ? jsonBlocks[0][1] : answer;
+
+    const parsed = JSON.parse(jsonText);
+
     const validPriorities: TicketPriority[] = ["Low", "Medium", "High", "Critical"];
     const priority: TicketPriority = validPriorities.includes(parsed.priority) ? parsed.priority : "Medium";
 

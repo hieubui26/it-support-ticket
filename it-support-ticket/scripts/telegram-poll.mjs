@@ -10,7 +10,7 @@ const botToken = process.env.TELEGRAM_BOT_TOKEN;
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const geminiApiKey = process.env.GEMINI_API_KEY;
-const geminiModel = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+const geminiModel = process.env.GEMINI_MODEL || "gemini-3-flash";
 
 if (!botToken) {
   console.error(
