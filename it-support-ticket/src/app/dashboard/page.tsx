@@ -36,6 +36,7 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedPriorities, setSelectedPriorities] = useState<TicketPriority[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [realtimeStatus, setRealtimeStatus] = useState<"connecting" | "connected" | "disconnected">(
     "connecting"
@@ -131,9 +132,14 @@ export default function DashboardPage() {
 
   // Filtering & column data
   const filteredTickets = useMemo(() => {
-    if (selectedPriorities.length === 0) return tickets;
-    return tickets.filter((ticket) => selectedPriorities.includes(ticket.priority));
-  }, [tickets, selectedPriorities]);
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    return tickets.filter((ticket) => {
+      const matchesPriority =
+        selectedPriorities.length === 0 || selectedPriorities.includes(ticket.priority);
+      const matchesTitle = ticket.title.toLowerCase().includes(normalizedQuery);
+      return matchesPriority && matchesTitle;
+    });
+  }, [tickets, selectedPriorities, searchQuery]);
 
   const newTickets = useMemo(() => filteredTickets.filter((t) => t.status === "New"), [
     filteredTickets,
@@ -251,39 +257,52 @@ export default function DashboardPage() {
             </div>
             <p className="text-xs text-slate-500 mt-0.5">Theo dõi luồng xử lý ticket đa kênh từ Portal và Telegram Bot</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Lọc theo mức độ ưu tiên">
-            {(["Low", "Medium", "High", "Critical"] as TicketPriority[]).map((priority) => {
-              const isSelected = selectedPriorities.includes(priority);
+          <div className="flex flex-wrap items-center gap-2">
+            <label htmlFor="ticket-search" className="sr-only">
+              Tìm ticket theo tiêu đề
+            </label>
+            <input
+              id="ticket-search"
+              type="search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Tìm theo tiêu đề..."
+              className="w-full sm:w-48 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+            />
+            <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Lọc theo mức độ ưu tiên">
+              {(["Low", "Medium", "High", "Critical"] as TicketPriority[]).map((priority) => {
+                const isSelected = selectedPriorities.includes(priority);
 
-              return (
-                <button
-                  key={priority}
-                  type="button"
-                  aria-pressed={isSelected}
-                  onClick={() =>
-                    setSelectedPriorities((current) =>
-                      current.includes(priority)
-                        ? current.filter((selected) => selected !== priority)
-                        : [...current, priority]
-                    )
-                  }
-                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                    isSelected
-                      ? "border-indigo-600 bg-indigo-600 text-white shadow-sm"
-                      : "border-slate-300 bg-white text-slate-600 hover:border-indigo-400 hover:text-indigo-700"
-                  }`}
-                >
-                  {priority}
-                </button>
-              );
-            })}
-            <button
-              type="button"
-              onClick={() => setSelectedPriorities([])}
-              className="rounded-full px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-            >
-              Xóa bộ lọc
-            </button>
+                return (
+                  <button
+                    key={priority}
+                    type="button"
+                    aria-pressed={isSelected}
+                    onClick={() =>
+                      setSelectedPriorities((current) =>
+                        current.includes(priority)
+                          ? current.filter((selected) => selected !== priority)
+                          : [...current, priority]
+                      )
+                    }
+                    className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                      isSelected
+                        ? "border-indigo-600 bg-indigo-600 text-white shadow-sm"
+                        : "border-slate-300 bg-white text-slate-600 hover:border-indigo-400 hover:text-indigo-700"
+                    }`}
+                  >
+                    {priority}
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => setSelectedPriorities([])}
+                className="rounded-full px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+              >
+                Xóa bộ lọc
+              </button>
+            </div>
           </div>
         </header>
 
