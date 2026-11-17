@@ -5,10 +5,22 @@ import Link from "next/link";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { Ticket, TicketPriority, TicketStatus } from "@/types/ticket";
 import TicketCard from "@/components/TicketCard";
-import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors } from "@dnd-kit/core";
+import {
+  DndContext,
+  closestCenter,
+  pointerWithin,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  type CollisionDetection,
+} from "@dnd-kit/core";
 import { useDroppable, useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import type { ReactNode } from "react";
+
+const collisionDetection: CollisionDetection = (args) =>
+  args.pointerCoordinates ? pointerWithin(args) : closestCenter(args);
 
 function DroppableColumn({
   status,
@@ -321,7 +333,7 @@ export default function DashboardPage() {
               <span className="text-sm">Đang tải dữ liệu tickets...</span>
             </div>
           ) : (
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <DndContext sensors={sensors} collisionDetection={collisionDetection} onDragEnd={handleDragEnd}>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-7xl mx-auto items-start">
                 {/* New Column */}
                 <DroppableColumn status="New">
